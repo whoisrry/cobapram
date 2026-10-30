@@ -97,6 +97,7 @@ Jaeger memakai config sendiri (`jaeger.yaml`): penyimpanan **memori** (maksimal 
 │   ├── models/          # struct GORM: User, Ticket, Reply
 │   ├── auth/            # JWT, sesi Redis (rotasi/reuse), rate limit, bcrypt, cookie
 │   ├── ticket/          # query tiket dengan pemeriksaan kepemilikan
+│   ├── user/            # validasi + pembuatan akun (CLI dan admin panel)
 │   ├── middleware/      # header keamanan, logging slog, recover, RequireAuth/RequireRole
 │   ├── handler/         # handler HTTP + routing net/http Go 1.22+
 │   ├── telemetry/       # setup OpenTelemetry, nama span per route, traceparent
@@ -123,6 +124,7 @@ Jaeger memakai config sendiri (`jaeger.yaml`): penyimpanan **memori** (maksimal 
 | `GET /tickets/{id}` | pemilik atau admin, selain itu 404 |
 | `POST /tickets/{id}/replies` | pemilik atau admin, selain itu 404 |
 | `POST /tickets/{id}/status` | admin, selain itu 404 |
+| `GET /admin/clients/new`, `POST /admin/clients` | admin, selain itu 404; membuat akun client (role selalu client) |
 | `GET /healthz` | publik (liveness) |
 | `POST /otel/v1/traces` | publik; ditangani Caddy (diteruskan ke Jaeger), tidak sampai ke app |
 
@@ -134,7 +136,7 @@ Jaeger memakai config sendiri (`jaeger.yaml`): penyimpanan **memori** (maksimal 
 | `make up` | `docker compose build`, menyalakan postgres/redis/jaeger sampai healthy, menjalankan migrasi (`/app/migrate up`, aman diulang), lalu menyalakan app dan caddy sampai healthy. |
 | `make down` | `docker compose down`. Volume (database, Redis, CA Caddy) tetap ada. |
 | `make restart` | Sama dengan `make down && make up`. |
-| `make user EMAIL=... NAME=... ROLE=client\|admin` | Membuat akun; password diminta interaktif. |
+| `make user EMAIL=... NAME=... ROLE=client\|admin` | Membuat akun; password diminta interaktif. Akun client juga bisa dibuat admin lewat menu "Tambah client". |
 | `make ca-cert` | Menyalin root CA Caddy ke `./caddy-root.crt` untuk di-import ke browser/OS. CA disimpan di volume `caddy_data`, jadi tetap sama setelah restart. |
 | `make ps` / `make logs [S=app]` | Status/health dan log. |
 | `make migrate` | Hanya menjalankan migrasi. |

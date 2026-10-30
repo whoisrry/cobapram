@@ -15,7 +15,7 @@ import (
 //go:embed *.html static
 var files embed.FS
 
-var pages = []string{"login.html", "tickets.html", "ticket_new.html", "ticket_show.html", "error.html"}
+var pages = []string{"login.html", "tickets.html", "ticket_new.html", "ticket_show.html", "client_new.html", "error.html"}
 
 type Views struct {
 	pages map[string]*template.Template

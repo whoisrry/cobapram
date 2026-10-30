@@ -16,4 +16,8 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/).
 - Akses lewat alamat IP dengan TLS dari CA internal Caddy (tanpa Let's Encrypt); `CADDY_TLS` untuk beralih ke ACME pada domain publik.
 - OpenTelemetry: tracing backend (HTTP per route, GORM, Redis, `trace_id` di log) dan browser (`/static/otel.js`: document load, form submit) yang tergabung dalam satu trace; Jaeger UI di port 16686.
 - Makefile: `make env`, `make up`, `make down`, `make restart`, `make user`, `make ca-cert`, `make logs`, `make ps`, `make test`.
+- Admin panel: halaman "Tambah client" (`/admin/clients/new`) untuk membuat akun client dengan password awal; role selalu client, email duplikat ditolak.
 - Unit test untuk validasi JWT, rotasi/reuse refresh token, rate limit, dan kepemilikan tiket.
+
+### Changed
+- Validasi dan pembuatan akun dipindah ke `internal/user`, dipakai bersama oleh CLI `create-user` dan admin panel.

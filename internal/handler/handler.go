@@ -61,6 +61,9 @@ func (h *Handler) Routes() http.Handler {
 	handle("POST /tickets/{id}/replies", authed(h.createReply))
 	handle("POST /tickets/{id}/status", adminOnly(h.updateStatus))
 
+	handle("GET /admin/clients/new", adminOnly(h.newClientForm))
+	handle("POST /admin/clients", adminOnly(h.createClient))
+
 	// gorilla/csrf melindungi semua method non-GET/HEAD/OPTIONS/TRACE.
 	protect := csrf.Protect(h.cfg.CSRFKey,
 		csrf.Secure(h.cfg.CookieSecure),
@@ -138,6 +141,7 @@ type viewData struct {
 }
 
 type formValues struct {
+	Name    string
 	Email   string
 	Subject string
 	Body    string
