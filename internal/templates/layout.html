@@ -1,0 +1,27 @@
+{{define "layout"}}<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Support</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/tickets">Support</a>
+    {{with .User}}
+    <nav>
+      <span class="who">{{.Name}} ({{.Role}})</span>
+      <form method="post" action="/logout" class="inline">
+        {{$.CSRF}}
+        <button type="submit" class="link">Keluar</button>
+      </form>
+    </nav>
+    {{end}}
+  </header>
+  <main>
+    {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+    {{template "content" .}}
+  </main>
+</body>
+</html>{{end}}

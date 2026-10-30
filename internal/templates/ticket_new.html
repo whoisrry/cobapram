@@ -1,0 +1,16 @@
+{{define "content"}}
+<section class="card">
+  <h1>Buat tiket</h1>
+  <form method="post" action="/tickets">
+    {{.CSRF}}
+    <label for="subject">Subjek</label>
+    <input id="subject" name="subject" type="text" value="{{.Form.Subject}}" maxlength="200" required autofocus>
+    <label for="body">Deskripsi</label>
+    <textarea id="body" name="body" rows="8" maxlength="10000" required>{{.Form.Body}}</textarea>
+    <div class="actions">
+      <button type="submit">Kirim tiket</button>
+      <a href="/tickets">Batal</a>
+    </div>
+  </form>
+</section>
+{{end}}

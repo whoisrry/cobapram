@@ -1,0 +1,48 @@
+{{define "content"}}
+{{with .Ticket}}
+<p><a href="/tickets">&larr; Kembali ke daftar</a></p>
+<article class="card">
+  <div class="heading">
+    <h1>#{{.ID}} {{.Subject}}</h1>
+    <span class="status status-{{.Status}}">{{.Status.Label}}</span>
+  </div>
+  <p class="meta">Oleh {{.User.Name}} · {{datetime .CreatedAt}}</p>
+  <div class="body">{{.Body}}</div>
+</article>
+
+{{if $.User.IsAdmin}}
+<form method="post" action="/tickets/{{.ID}}/status" class="card filters">
+  {{$.CSRF}}
+  <label for="status">Ubah status</label>
+  <select id="status" name="status">
+    {{range $.Statuses}}
+    <option value="{{.}}" {{if eq . $.Ticket.Status}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+  <button type="submit">Simpan</button>
+</form>
+{{end}}
+
+<section>
+  <h2>Balasan ({{len .Replies}})</h2>
+  {{range .Replies}}
+  <article class="card reply{{if eq .User.Role "admin"}} reply-admin{{end}}">
+    <p class="meta">{{.User.Name}}{{if eq .User.Role "admin"}} · Tim support{{end}} · {{datetime .CreatedAt}}</p>
+    <div class="body">{{.Body}}</div>
+  </article>
+  {{else}}
+  <p class="muted">Belum ada balasan.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Tulis balasan</h2>
+  <form method="post" action="/tickets/{{.ID}}/replies">
+    {{$.CSRF}}
+    <label for="reply-body" class="sr-only">Balasan</label>
+    <textarea id="reply-body" name="body" rows="5" maxlength="10000" required>{{$.Form.Body}}</textarea>
+    <button type="submit">Kirim balasan</button>
+  </form>
+</section>
+{{end}}
+{{end}}
