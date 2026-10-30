@@ -13,6 +13,7 @@ services:
       REDIS_ADDR: redis:6379
       # Aplikasi hanya bisa dijangkau lewat Caddy, jadi X-Forwarded-For dapat dipercaya.
       TRUST_PROXY_HEADERS: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,17 +70,41 @@ services:
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
 
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    command: ["--config", "/etc/jaeger/config.yaml"]
+    volumes:
+      - ./jaeger.yaml:/etc/jaeger/config.yaml:ro
+    ports:
+      # Jaeger UI di semua interface host (diakses lewat IP private).
+      # Jaeger UI tidak memiliki login: batasi dengan firewall (lihat README).
+      - "0.0.0.0:16686:16686"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:13133/status"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [web]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
   caddy:
     image: caddy:2.10.2-alpine
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS wajib diisi di .env (IP atau domain)}
+      CADDY_TLS: ${CADDY_TLS:-internal}
     ports:
-      # Hanya Caddy yang membuka port ke publik.
+      # Hanya Caddy (dan Jaeger UI) yang membuka port ke host.
       - "80:80"
       - "443:443"
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # caddy_data menyimpan CA internal: sertifikat tetap sama setelah restart,
+      # jadi root CA cukup di-import ke browser sekali (make ca-cert).
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

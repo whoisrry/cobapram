@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · Support</title>
   <link rel="stylesheet" href="/static/app.css">
+  {{- if .Telemetry}}
+  {{with .Traceparent}}<meta name="traceparent" content="{{.}}">{{end}}
+  <script src="/static/otel.js" defer></script>
+  {{- end}}
 </head>
 <body>
   <header class="topbar">

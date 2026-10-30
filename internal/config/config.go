@@ -67,6 +67,11 @@ type Config struct {
 
 	LoginRateLimit  int
 	LoginRateWindow time.Duration
+
+	// OpenTelemetry. Endpoint exporter dibaca langsung oleh SDK dari
+	// variabel standar OTEL_EXPORTER_OTLP_ENDPOINT.
+	OTelEnabled     bool
+	OTelServiceName string
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
@@ -99,6 +104,8 @@ func Load() (Config, error) {
 		TrustProxyHeaders: r.bool("TRUST_PROXY_HEADERS", false),
 		LoginRateLimit:    r.int("LOGIN_RATE_LIMIT", 10),
 		LoginRateWindow:   r.duration("LOGIN_RATE_WINDOW", 15*time.Minute),
+		OTelEnabled:       r.bool("OTEL_ENABLED", false),
+		OTelServiceName:   r.str("OTEL_SERVICE_NAME", "ticketing-app"),
 	}
 
 	if cfg.Env != "production" && cfg.Env != "development" {

@@ -3,9 +3,12 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/whoisrry/cobapram/internal/telemetry"
 )
 
 // Chain menerapkan middleware dengan urutan terluar lebih dulu:
@@ -17,16 +20,20 @@ func Chain(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler 
 	return h
 }
 
-// SecurityHeaders menambahkan header keamanan dasar. CSP ketat (tanpa inline
-// script/style) aman karena aplikasi tidak memakai JavaScript dan CSS
-// disajikan dari /static.
-func SecurityHeaders(hsts bool) func(http.Handler) http.Handler {
+// SecurityHeaders menambahkan header keamanan dasar. CSP ketat tanpa inline
+// script/style. Satu-satunya JavaScript adalah /static/otel.js (telemetri
+// browser), jadi script-src dan connect-src 'self' hanya diizinkan jika
+// telemetri aktif; span dikirim ke /otel/v1/traces di origin yang sama.
+func SecurityHeaders(hsts, browserTelemetry bool) func(http.Handler) http.Handler {
+	csp := "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; " +
+		"frame-ancestors 'none'; base-uri 'none'"
+	if browserTelemetry {
+		csp += "; script-src 'self'; connect-src 'self'"
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
-			h.Set("Content-Security-Policy",
-				"default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "+
-					"frame-ancestors 'none'; base-uri 'none'")
+			h.Set("Content-Security-Policy", csp)
 			h.Set("X-Frame-Options", "DENY")
 			// same-origin (bukan no-referrer): browser mengirim Origin/Referer
 			// pada POST same-origin, yang diperiksa oleh gorilla/csrf.
@@ -76,6 +83,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 				slog.String("path", r.URL.Path),
 				slog.Int("status", rec.status),
 				slog.Duration("duration", time.Since(start)),
+				slog.String("trace_id", telemetry.TraceID(r.Context())),
 			)
 		})
 	}
@@ -90,7 +98,8 @@ func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 					if v == http.ErrAbortHandler {
 						panic(v)
 					}
-					log.Error("panic", "error", v, "method", r.Method, "path", r.URL.Path)
+					log.ErrorContext(r.Context(), "panic", "error", v, "method", r.Method, "path", r.URL.Path)
+					telemetry.RecordError(r.Context(), fmt.Errorf("panic: %v", v))
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				}
 			}()

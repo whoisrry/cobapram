@@ -1,2 +1,7 @@
 .env
 /bin/
+caddy-root.crt
+web/node_modules/
+web/dist/
+# Hasil build web/ (dibuat di Dockerfile atau `make web`).
+internal/templates/static/otel.js

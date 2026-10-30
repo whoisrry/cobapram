@@ -16,12 +16,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/whoisrry/cobapram/internal/auth"
 	"github.com/whoisrry/cobapram/internal/config"
 	"github.com/whoisrry/cobapram/internal/db"
 	"github.com/whoisrry/cobapram/internal/handler"
+	"github.com/whoisrry/cobapram/internal/telemetry"
 	"github.com/whoisrry/cobapram/internal/templates"
 )
 
@@ -47,6 +49,18 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	shutdownTelemetry, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("setup opentelemetry: %w", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTelemetry(ctx); err != nil {
+			logger.Warn("gagal mengirim sisa span", "error", err)
+		}
+	}()
+
 	gdb, err := db.Open(ctx, cfg.DB, logger)
 	if err != nil {
 		return err
@@ -63,6 +77,11 @@ func run() error {
 		WriteTimeout: 2 * time.Second,
 	})
 	defer rdb.Close()
+	// Nama perintah Redis dicatat, tetapi argumennya tidak (berisi id sesi
+	// dan jti refresh token).
+	if err := redisotel.InstrumentTracing(rdb, redisotel.WithDBStatement(false)); err != nil {
+		return fmt.Errorf("pasang tracing redis: %w", err)
+	}
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := rdb.Ping(pingCtx).Err(); err != nil {
@@ -96,7 +115,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("server berjalan", "addr", cfg.Addr, "env", cfg.Env)
+		logger.Info("server berjalan", "addr", cfg.Addr, "env", cfg.Env, "otel", cfg.OTelEnabled)
 		errCh <- srv.ListenAndServe()
 	}()
 

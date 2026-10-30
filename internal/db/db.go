@@ -11,6 +11,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/plugin/opentelemetry/tracing"
 
 	"github.com/whoisrry/cobapram/internal/config"
 )
@@ -30,6 +31,13 @@ func Open(ctx context.Context, cfg config.DBConfig, log *slog.Logger) (*gorm.DB,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("buka database: %w", err)
+	}
+
+	// Span per query sebagai child dari span HTTP (lewat WithContext).
+	// WithoutQueryVariables: hanya SQL berparameter yang dicatat, nilai
+	// parameter (bisa berisi data pribadi) tidak dikirim ke Jaeger.
+	if err := gdb.Use(tracing.NewPlugin(tracing.WithoutMetrics(), tracing.WithoutQueryVariables())); err != nil {
+		return nil, fmt.Errorf("pasang tracing gorm: %w", err)
 	}
 
 	sqlDB, err := gdb.DB()

@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/gorilla/csrf"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/gorm"
 
 	"github.com/whoisrry/cobapram/internal/auth"
 	"github.com/whoisrry/cobapram/internal/config"
 	mw "github.com/whoisrry/cobapram/internal/middleware"
 	"github.com/whoisrry/cobapram/internal/models"
+	"github.com/whoisrry/cobapram/internal/telemetry"
 	"github.com/whoisrry/cobapram/internal/templates"
 	"github.com/whoisrry/cobapram/internal/ticket"
 )
@@ -42,20 +44,22 @@ func (h *Handler) Routes() http.Handler {
 	adminOnly := func(f http.HandlerFunc) http.Handler { return authn.RequireAuth(mw.RequireRole(models.RoleAdmin, f)) }
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", h.healthz)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(templates.Static())))
+	handle := func(pattern string, h http.Handler) { mux.Handle(pattern, telemetry.Route(pattern, h)) }
 
-	mux.HandleFunc("GET /login", h.loginForm)
-	mux.HandleFunc("POST /login", h.login)
-	mux.Handle("POST /logout", authed(h.logout))
+	handle("GET /healthz", http.HandlerFunc(h.healthz))
+	handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(templates.Static())))
 
-	mux.Handle("GET /{$}", http.RedirectHandler("/tickets", http.StatusSeeOther))
-	mux.Handle("GET /tickets", authed(h.listTickets))
-	mux.Handle("GET /tickets/new", clientOnly(h.newTicketForm))
-	mux.Handle("POST /tickets", clientOnly(h.createTicket))
-	mux.Handle("GET /tickets/{id}", authed(h.showTicket))
-	mux.Handle("POST /tickets/{id}/replies", authed(h.createReply))
-	mux.Handle("POST /tickets/{id}/status", adminOnly(h.updateStatus))
+	handle("GET /login", http.HandlerFunc(h.loginForm))
+	handle("POST /login", http.HandlerFunc(h.login))
+	handle("POST /logout", authed(h.logout))
+
+	handle("GET /{$}", http.RedirectHandler("/tickets", http.StatusSeeOther))
+	handle("GET /tickets", authed(h.listTickets))
+	handle("GET /tickets/new", clientOnly(h.newTicketForm))
+	handle("POST /tickets", clientOnly(h.createTicket))
+	handle("GET /tickets/{id}", authed(h.showTicket))
+	handle("POST /tickets/{id}/replies", authed(h.createReply))
+	handle("POST /tickets/{id}/status", adminOnly(h.updateStatus))
 
 	// gorilla/csrf melindungi semua method non-GET/HEAD/OPTIONS/TRACE.
 	protect := csrf.Protect(h.cfg.CSRFKey,
@@ -68,13 +72,22 @@ func (h *Handler) Routes() http.Handler {
 		csrf.ErrorHandler(http.HandlerFunc(h.csrfFailed)),
 	)
 
-	return mw.Chain(mux,
+	app := mw.Chain(mux,
 		mw.Recover(h.log),
 		mw.Logger(h.log),
-		mw.SecurityHeaders(h.cfg.IsProduction()),
+		mw.SecurityHeaders(h.cfg.IsProduction(), h.cfg.OTelEnabled),
 		mw.MaxBody(64<<10),
 		h.markPlaintext,
 		protect,
+	)
+
+	// otelhttp di lapisan terluar agar span server sudah ada saat logger dan
+	// handler berjalan (trace_id di log, span DB/Redis menjadi child-nya).
+	// Health check dan file statis tidak di-trace agar Jaeger tidak penuh noise.
+	return otelhttp.NewHandler(app, "http.server",
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/healthz" && !strings.HasPrefix(r.URL.Path, "/static/")
+		}),
 	)
 }
 
@@ -110,6 +123,11 @@ type viewData struct {
 	Error   string
 	Message string
 
+	// Telemetry=true memuat /static/otel.js; Traceparent menghubungkan span
+	// browser dengan span server yang merender halaman.
+	Telemetry   bool
+	Traceparent string
+
 	Form     formValues
 	Tickets  []models.Ticket
 	Ticket   *models.Ticket
@@ -127,6 +145,10 @@ type formValues struct {
 
 func (h *Handler) newView(r *http.Request, title string) viewData {
 	v := viewData{Title: title, CSRF: csrf.TemplateField(r), Statuses: models.Statuses}
+	if h.cfg.OTelEnabled {
+		v.Telemetry = true
+		v.Traceparent = telemetry.Traceparent(r.Context())
+	}
 	if p, ok := mw.CurrentUser(r.Context()); ok {
 		v.User = &p
 	}
@@ -153,7 +175,8 @@ func (h *Handler) notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	h.log.Error("internal error", "error", err, "method", r.Method, "path", r.URL.Path)
+	telemetry.RecordError(r.Context(), err)
+	h.log.ErrorContext(r.Context(), "internal error", "error", err, "method", r.Method, "path", r.URL.Path)
 	h.renderError(w, r, http.StatusInternalServerError, "Terjadi kesalahan", "Terjadi kesalahan pada server. Silakan coba lagi.")
 }
 

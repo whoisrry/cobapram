@@ -1,0 +1,58 @@
+# Jaeger v2 (all-in-one): menerima OTLP dari app dan browser, menyimpan trace
+# di memori, dan menyajikan UI di port 16686.
+#
+# Penyimpanan memori: trace hilang saat container Jaeger restart
+# (misalnya `make down && make up`). Batas max_traces mencegah memori habis.
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    metrics:
+      level: none
+    logs:
+      level: info
+
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+      # Hanya untuk health check di dalam container.
+      endpoint: 127.0.0.1:13133
+
+  jaeger_query:
+    # Jangan men-trace Jaeger sendiri (mengurangi noise di daftar service).
+    enable_tracing: false
+    storage:
+      traces: memstore
+    http:
+      # Jaeger UI, listen di semua interface agar bisa dibuka dari IP private.
+      endpoint: 0.0.0.0:16686
+    grpc:
+      endpoint: 0.0.0.0:16685
+
+  jaeger_storage:
+    backends:
+      memstore:
+        memory:
+          max_traces: 50000
+
+receivers:
+  otlp:
+    protocols:
+      # Dijangkau oleh container app (gRPC/HTTP) dan Caddy (HTTP) lewat
+      # jaringan Docker; port ini tidak di-publish ke host.
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: memstore
