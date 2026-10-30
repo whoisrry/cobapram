@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="heading">
+  <h1>{{if .User.IsAdmin}}Semua tiket{{else}}Tiket saya{{end}}</h1>
+  {{if not .User.IsAdmin}}<a class="button" href="/tickets/new">Buat tiket</a>{{end}}
+</div>
+
+{{if .User.IsAdmin}}
+<form method="get" action="/tickets" class="filters">
+  <label for="status">Status</label>
+  <select id="status" name="status">
+    <option value="">Semua</option>
+    {{range .Statuses}}
+    <option value="{{.}}" {{if eq . $.Filter.Status}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+  <label for="client">Nama client</label>
+  <input id="client" name="client" type="search" value="{{.Filter.ClientName}}" maxlength="100">
+  <button type="submit">Filter</button>
+</form>
+{{end}}
+
+{{if .Tickets}}
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Subjek</th>{{if .User.IsAdmin}}<th>Client</th>{{end}}<th>Status</th><th>Diperbarui</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Tickets}}
+    <tr>
+      <td>{{.ID}}</td>
+      <td><a href="/tickets/{{.ID}}">{{.Subject}}</a></td>
+      {{if $.User.IsAdmin}}<td>{{.User.Name}}</td>{{end}}
+      <td><span class="status status-{{.Status}}">{{.Status.Label}}</span></td>
+      <td>{{datetime .UpdatedAt}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">Belum ada tiket.</p>
+{{end}}
+
+{{if or .PrevURL .NextURL}}
+<nav class="pager">
+  {{with .PrevURL}}<a href="{{.}}">&larr; Sebelumnya</a>{{end}}
+  {{with .NextURL}}<a href="{{.}}">Berikutnya &rarr;</a>{{end}}
+</nav>
+{{end}}
+{{end}}

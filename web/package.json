@@ -1,0 +1,20 @@
+{
+  "name": "ticketing-web-telemetry",
+  "private": true,
+  "description": "Bundle OpenTelemetry untuk browser (satu file statis, tanpa framework).",
+  "scripts": {
+    "build": "esbuild src/otel.js --bundle --minify --format=iife --platform=browser --target=es2020 --legal-comments=none --outfile=dist/otel.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/core": "3.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.300.0",
+    "@opentelemetry/instrumentation": "0.300.0",
+    "@opentelemetry/instrumentation-document-load": "0.69.0",
+    "@opentelemetry/resources": "3.0.0",
+    "@opentelemetry/sdk-trace": "3.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

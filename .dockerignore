@@ -1,0 +1,13 @@
+.git
+.env
+*.md
+Caddyfile
+docker-compose.yml
+jaeger.yaml
+Makefile
+scripts/
+bin/
+web/node_modules
+web/dist
+internal/templates/static/otel.js
+caddy-root.crt

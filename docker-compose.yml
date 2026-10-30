@@ -1,0 +1,132 @@
+name: ticketing
+
+services:
+  app:
+    build: .
+    image: ticketing-app:local
+    env_file: .env
+    environment:
+      # Nilai yang bergantung pada topologi compose ditetapkan di sini.
+      HTTP_ADDR: ":8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_ADDR: redis:6379
+      # Aplikasi hanya bisa dijangkau lewat Caddy, jadi X-Forwarded-For dapat dipercaya.
+      TRUST_PROXY_HEADERS: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/server", "healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [web, backend]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER wajib diisi di .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi di .env}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME wajib diisi di .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.5-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD wajib diisi di .env}
+    # appendonly: sesi tetap ada setelah Redis restart.
+    # noeviction: key sesi/refresh token tidak boleh dibuang diam-diam saat memori penuh.
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    command: ["--config", "/etc/jaeger/config.yaml"]
+    volumes:
+      - ./jaeger.yaml:/etc/jaeger/config.yaml:ro
+    ports:
+      # Jaeger UI di semua interface host (diakses lewat IP private).
+      # Jaeger UI tidak memiliki login: batasi dengan firewall (lihat README).
+      - "0.0.0.0:16686:16686"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:13133/status"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [web]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS wajib diisi di .env (IP atau domain)}
+      CADDY_TLS: ${CADDY_TLS:-internal}
+    ports:
+      # Hanya Caddy (dan Jaeger UI) yang membuka port ke host.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # caddy_data menyimpan CA internal: sertifikat tetap sama setelah restart,
+      # jadi root CA cukup di-import ke browser sekali (make ca-cert).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks: [web]
+    restart: unless-stopped
+
+networks:
+  web: {}
+  # internal: tanpa akses keluar dan tidak bisa di-publish ke host.
+  # PostgreSQL dan Redis hanya ada di jaringan ini.
+  backend:
+    internal: true
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  caddy_data: {}
+  caddy_config: {}
