@@ -57,6 +57,7 @@ td a { overflow-wrap: anywhere; }
 .status-in_progress { background: #fff4d6; color: #8a5a00; }
 .status-closed { background: #eceff3; color: #4b5563; }
 
+.notice { padding: .75rem 1rem; border-radius: 6px; background: #e3f2e8; color: #1e6b3a; border: 1px solid #b7dfc3; }
 .alert { padding: .75rem 1rem; border-radius: 6px; background: #fde8e7; color: var(--danger); border: 1px solid #f6c3bf; }
 .pager { display: flex; justify-content: space-between; margin-top: 1rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

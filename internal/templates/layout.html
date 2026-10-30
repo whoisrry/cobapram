@@ -15,6 +15,7 @@
     <a class="brand" href="/tickets">Support</a>
     {{with .User}}
     <nav>
+      {{if .IsAdmin}}<a href="/admin/clients/new">Tambah client</a>{{end}}
       <span class="who">{{.Name}} ({{.Role}})</span>
       <form method="post" action="/logout" class="inline">
         {{$.CSRF}}

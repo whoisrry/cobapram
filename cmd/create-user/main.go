@@ -15,19 +15,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/mail"
 	"os"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"golang.org/x/term"
-	"gorm.io/gorm"
 
-	"github.com/whoisrry/cobapram/internal/auth"
 	"github.com/whoisrry/cobapram/internal/config"
 	"github.com/whoisrry/cobapram/internal/db"
 	"github.com/whoisrry/cobapram/internal/models"
+	"github.com/whoisrry/cobapram/internal/user"
 )
 
 func main() {
@@ -44,35 +41,20 @@ func run() error {
 	password := flag.String("password", "", "password (tidak disarankan, tercatat di shell history; kosongkan untuk membaca dari stdin)")
 	flag.Parse()
 
-	u := models.User{
-		Email: auth.NormalizeEmail(*email),
-		Name:  strings.TrimSpace(*name),
-		Role:  models.Role(*role),
-	}
-	if addr, err := mail.ParseAddress(u.Email); err != nil || addr.Address != u.Email || len(u.Email) > 254 {
-		return errors.New("--email tidak valid")
-	}
-	if u.Name == "" || utf8.RuneCountInString(u.Name) > 100 {
-		return errors.New("--name wajib diisi, maksimal 100 karakter")
-	}
-	if !u.Role.Valid() {
-		return errors.New("--role harus client atau admin")
+	in := user.NewUser{Name: *name, Email: *email, Role: models.Role(*role)}
+	if err := user.Validate(in); err != nil {
+		return err
 	}
 
-	pw := *password
-	if pw != "" {
+	if *password != "" {
 		fmt.Fprintln(os.Stderr, "peringatan: --password tercatat di shell history; sebaiknya gunakan stdin")
+		in.Password = *password
 	} else {
 		var err error
-		if pw, err = readPassword(); err != nil {
+		if in.Password, err = readPassword(); err != nil {
 			return err
 		}
 	}
-	hash, err := auth.HashPassword(pw)
-	if err != nil {
-		return err
-	}
-	u.PasswordHash = hash
 
 	dbCfg, err := config.LoadDB()
 	if err != nil {
@@ -86,10 +68,7 @@ func run() error {
 		return err
 	}
 
-	err = gdb.WithContext(ctx).Create(&u).Error
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return fmt.Errorf("email %s sudah terdaftar", u.Email)
-	}
+	u, err := user.Create(ctx, gdb, in)
 	if err != nil {
 		return err
 	}
